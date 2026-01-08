@@ -95,7 +95,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     }
                   },
 
-                    child: authState.isAuthenticated
+                    child: authState.isLoading
                         ? const CircularProgressIndicator(
                             color: Colors.white,
                           )

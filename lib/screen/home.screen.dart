@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/game.service.dart';
 import '../providers/auth.provider.dart';
 import 'game_lobby.screen.dart';
-import '../theme/app_colors.dart'; // 👈 Couleurs du thème
+import '../theme/app_colors.dart'; // Couleurs du thème
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});

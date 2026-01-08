@@ -41,9 +41,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// 🔹 Authentification (connexion ou inscription)
   Future<bool> handleAuth(String username, String password) async {
     state = state.copyWith(isLoading: true);
-    print('passwordController : ${username} ');
-        print('passwordController : ${username} ');
-
 
     try {
       final endpoint =

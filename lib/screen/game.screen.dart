@@ -4,7 +4,7 @@ import '../providers/game.provider.dart';
 import '../providers/auth.provider.dart';
 import '../model/player.dart';
 import '../services/game.service.dart';
-import '../theme/app_colors.dart'; // 🎨 ton thème principal
+import '../theme/app_colors.dart';
 
 class GameLobbyScreen extends ConsumerWidget {
   final int gameId;

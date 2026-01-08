@@ -31,7 +31,7 @@ class _GameRoundScreenState extends ConsumerState<GameRoundScreen> {
   Timer? _timer;
   final TextEditingController _promptController = TextEditingController();
   final TextEditingController _guessController = TextEditingController();
-  Set<String> _foundWords = {}; // Words found for the current challenge
+  Set<String> _foundWords = {};
 
   final GameService _gameService = GameService();
   
@@ -60,7 +60,6 @@ class _GameRoundScreenState extends ConsumerState<GameRoundScreen> {
         setState(() => _timeLeft--);
       } else {
         timer.cancel();
-        // Forcer la fin de partie côté client
         if (mounted) {
           _showDialog("⏰ Temps écoulé !", "La partie est terminée car le temps est écoulé.");
           Future.delayed(const Duration(seconds: 1), () {
@@ -71,7 +70,6 @@ class _GameRoundScreenState extends ConsumerState<GameRoundScreen> {
     });
   }
 
-  /// 🔹 Check if the game is finished
   Future<void> _checkIfGameFinished() async {
     final status = await _gameService.getGameStatus(widget.gameId, widget.token);
     if (status?["status"] == "finished") {
@@ -162,7 +160,6 @@ class _GameRoundScreenState extends ConsumerState<GameRoundScreen> {
     return challenges[index] as Map<String, dynamic>;
   }
 
-  /// 🔹 Check that the prompt does not contain forbidden words
   bool _validatePrompt(String prompt) {
     final challenge = _currentChallenge;
 

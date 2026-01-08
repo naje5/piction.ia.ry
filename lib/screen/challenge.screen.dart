@@ -74,7 +74,7 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen>
       if (fields.any((ctrl) => ctrl == null || ctrl.text.trim().isEmpty)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("❌ Veuillez remplir tous les champs du challenge ${i + 1}"),
+            content: Text("Veuillez remplir tous les champs du challenge ${i + 1}"),
             backgroundColor: AppColors.secondary,
           ),
         );
@@ -134,27 +134,26 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen>
         curve: Curves.easeInOutCubic,
       );
 
-  // --- Modern card (glass-like) ---
   Widget _modernCard({required Widget child}) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: LinearGradient(
           colors: [
-            Colors.white.withAlpha(179), // ~0.7
-            Colors.white.withAlpha(77),  // ~0.3
+            Colors.white.withAlpha(179),
+            Colors.white.withAlpha(77),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withAlpha(38), // ~0.15 * 255
+            color: AppColors.primary.withAlpha(38),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
         ],
-        border: Border.all(color: Colors.white.withAlpha(102)), // ~0.4
+        border: Border.all(color: Colors.white.withAlpha(102)),
       ),
       padding: const EdgeInsets.all(20),
       child: child,
@@ -173,7 +172,7 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen>
         hintText: hint,
         prefixIcon: icon != null ? Icon(icon, color: isError ? AppColors.secondary : AppColors.primaryDark) : null,
         filled: true,
-        fillColor: Colors.white.withAlpha(204), // ~0.8
+        fillColor: Colors.white.withAlpha(204),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
@@ -256,7 +255,6 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Background gradient appliqué via Container.decoration (pas via Shader.color)
     return Scaffold(
       appBar: AppBar(
         title: const Text("Créer vos challenges"),
@@ -266,7 +264,7 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen>
         actions: [
           IconButton(
             tooltip: "Simuler 3 challenges",
-            icon: const Icon(Icons.picture_in_picture_alt, color: Colors.orange),
+            icon: const Icon(Icons.auto_awesome, color: Colors.orange),
             onPressed: () async {
               final token = ref.read(authNotifierProvider).token;
               if (token == null) return;
@@ -285,7 +283,6 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen>
         ],
       ),
       body: Container(
-        // Gradient de fond entre primaryLight et secondaryLight
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [AppColors.primaryLight, AppColors.secondaryLight],
@@ -296,7 +293,6 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen>
         child: SafeArea(
           child: Column(
             children: [
-              // Step indicator
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
                 child: Row(
