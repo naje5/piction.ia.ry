@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_app/screen/challenge.screen.dart';
+import 'package:flutter_app/screen/game_round.screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth.provider.dart';
 import '../services/game.service.dart';
+import '../services/challenge.service.dart';
 import '../theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -30,13 +32,14 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
   int? _currentUserId;
 
   final GameService _service = GameService();
+  final ChallengeService _challengeService = ChallengeService();
 
   @override
   void initState() {
     super.initState();
     _fetchCurrentUserId();
     _fetchGameData();
-    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _fetchGameData());
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _fetchGameData());
   }
 
   Future<void> _fetchCurrentUserId() async {
@@ -66,12 +69,65 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
     if (token == null) return;
 
     final session = await _service.getGameSession(widget.gameId, token);
+    if (session == null) return;
 
     if (mounted) {
       setState(() {
         _session = session;
         _isLoading = false;
       });
+    }
+
+    await _checkGameStatusAndRedirect(token);
+  }
+
+  Future<void> _checkGameStatusAndRedirect(String token) async {
+    if (!mounted) return;
+
+    try {
+      final gameStatus = await _service.getGameStatus(widget.gameId, token);
+      if (gameStatus == null) return;
+
+      final status = gameStatus['status'] as String?;
+
+      // Si le jeu est en phase drawing ou guessing, rediriger vers GameRoundScreen
+      if (status == 'drawing' || status == 'guessing') {
+        if (mounted) {
+          _timer?.cancel();
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => GameRoundScreen(gameId: widget.gameId, token: token),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Si le jeu est terminé, rester dans le lobby
+      if (status == 'finished') {
+        return;
+      }
+
+      // Si le statut est "challenge", vérifier si l'utilisateur a créé ses challenges
+      if (status == 'challenge') {
+        final myChallenges = await _challengeService.getChallenges(widget.gameId, token);
+        final hasCreatedChallenges = myChallenges != null && myChallenges.length >= 3;
+
+        // Rediriger vers ChallengeScreen seulement si l'utilisateur n'a pas encore créé ses challenges
+        if (!hasCreatedChallenges && mounted) {
+          _timer?.cancel();
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChallengeScreen(gameId: widget.gameId),
+            ),
+          );
+        }
+      }
+      // Si le statut est "lobby" ou autre, rester dans le lobby (ne rien faire)
+    } catch (e) {
+      debugPrint('Erreur lors de la vérification du statut du jeu: $e');
     }
   }
 
@@ -309,7 +365,8 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
     final isCreator = _currentUserId != null
         ? _currentUserId == sessionCreatorId
         : (sessionCreatorId == widget.creatorId);
-    final canStartGame = playersCount >= 4 && isCreator;
+    // Le bouton s'affiche seulement si l'utilisateur est le créateur
+    // Mais il ne sera cliquable que si 4 joueurs sont présents
 
     final List<int> blueTeamIds = [
       session['blue_player_1'],
@@ -471,25 +528,30 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
                 const Spacer(),
                 const SizedBox(height: 20),
 
-                if (canStartGame)
+                // Bouton "Démarrer la partie" - visible seulement pour le créateur
+                if (isCreator)
                   ElevatedButton.icon(
-                    onPressed: _startGame,
+                    onPressed: playersCount >= 4 ? _startGame : null,
                     icon: const Icon(Icons.play_arrow, size: 22),
-                    label: const Text(
-                      "Démarrer la partie",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    label: Text(
+                      playersCount >= 4
+                          ? "Démarrer la partie"
+                          : "En attente de joueurs (${playersCount}/4)",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: playersCount >= 4
+                          ? AppColors.primary
+                          : AppColors.muted,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 28),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      elevation: 4,
+                      elevation: playersCount >= 4 ? 4 : 0,
                     ),
                   ),
-                if (canStartGame) const SizedBox(height: 12),
+                if (isCreator) const SizedBox(height: 12),
 
                 // Bouton pour changer d'équipe
                 ElevatedButton.icon(

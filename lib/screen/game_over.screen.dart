@@ -1,7 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_app/services/challenge.service.dart';
 import 'package:flutter_app/services/game.service.dart';
+import 'package:flutter_app/screen/home.screen.dart';
 import 'package:flutter_app/theme/app_colors.dart';
 
 class GameOverScreen extends StatefulWidget {
@@ -24,9 +24,7 @@ class _GameOverScreenState extends State<GameOverScreen> {
   bool _isLoading = true;
   bool _isError = false;
 
-  List<dynamic> _challenges = [];
-  Map<String, Map<String, int>> _playerStats = {};
-  Map<String, String> _playerNames = {};
+  List<Map<String, dynamic>> _playerScores = [];
 
   final ChallengeService _challengeService = ChallengeService();
   final GameService _gameService = GameService();
@@ -34,19 +32,21 @@ class _GameOverScreenState extends State<GameOverScreen> {
   @override
   void initState() {
     super.initState();
-    _loadAllChallenges();
+    _loadPlayerScores();
   }
 
-  // ==============================
-  // DATA LOADING
-  // ==============================
-  Future<void> _loadAllChallenges() async {
+  Future<void> _loadPlayerScores() async {
     try {
       final challenges =
           await _challengeService.getAllChallenges(widget.gameId, widget.token);
 
       if (challenges == null) {
-        setState(() => _isError = true);
+        if (mounted) {
+          setState(() {
+            _isError = true;
+            _isLoading = false;
+          });
+        }
         return;
       }
 
@@ -58,76 +58,58 @@ class _GameOverScreenState extends State<GameOverScreen> {
         }
       }
 
-      // ---- Fetch player names
-      final Map<String, String> playerNames = {};
+      // ---- Fetch player names and calculate scores
+      final Map<String, Map<String, dynamic>> playerData = {};
+      
       for (final idStr in challengerIds) {
         try {
           final player =
               await _gameService.fetchPlayer(int.parse(idStr), widget.token);
-          playerNames[idStr] =
-              player?['name'] ?? player?['username'] ?? 'Joueur#$idStr';
+          final playerName = player?['name'] ?? player?['username'] ?? 'Joueur#$idStr';
+          
+          playerData[idStr] = {
+            'name': playerName,
+            'resolved': 0,
+            'score': 0,
+          };
         } catch (_) {
-          playerNames[idStr] = 'Joueur#$idStr';
+          playerData[idStr] = {
+            'name': 'Joueur#$idStr',
+            'resolved': 0,
+            'score': 0,
+          };
         }
       }
 
-      // ---- Stats per player
-      final Map<String, Map<String, int>> stats = {};
+      // ---- Calculate scores (100 pts per resolved challenge)
       for (final c in challenges) {
         final id = c['challenger_id']?.toString();
-        final playerName = playerNames[id] ?? 'Joueur#$id';
-
-        final bool resolved = c['is_resolved'] == 1 || c['is_resolved'] == true;
-
-        stats.putIfAbsent(playerName, () => {
-              'resolved': 0,
-              'unresolved': 0,
-            });
-
-        if (resolved) {
-          stats[playerName]!['resolved'] =
-              stats[playerName]!['resolved']! + 1;
-        } else {
-          stats[playerName]!['unresolved'] =
-              stats[playerName]!['unresolved']! + 1;
+        if (id != null && playerData.containsKey(id)) {
+          final bool resolved = c['is_resolved'] == 1 || c['is_resolved'] == true;
+          if (resolved) {
+            playerData[id]!['resolved'] = (playerData[id]!['resolved'] as int) + 1;
+            playerData[id]!['score'] = (playerData[id]!['score'] as int) + 100;
+          }
         }
       }
 
+      // ---- Convert to list and sort by score (descending)
+      final List<Map<String, dynamic>> scores = playerData.values.toList();
+      scores.sort((a, b) => (b['score'] as int).compareTo(a['score'] as int));
+
       setState(() {
-        _challenges = challenges;
-        _playerStats = stats;
-        _playerNames = playerNames;
+        _playerScores = scores;
         _isLoading = false;
       });
     } catch (e) {
       debugPrint('Erreur GameOverScreen: $e');
-      setState(() => _isError = true);
+      if (mounted) {
+        setState(() {
+          _isError = true;
+          _isLoading = false;
+        });
+      }
     }
-  }
-
-  // ==============================
-  // HELPERS
-  // ==============================
-  String _getChallengeResult(Map<String, dynamic> challenge) {
-    if (challenge['proposals'] != null &&
-        challenge['proposals'].toString().isNotEmpty) {
-      try {
-        final List proposals = jsonDecode(challenge['proposals']);
-        if (proposals.isNotEmpty) {
-          return proposals.first.toString();
-        }
-      } catch (_) {}
-    }
-
-    final words = [
-      challenge['first_word'],
-      challenge['second_word'],
-      challenge['third_word'],
-      challenge['fourth_word'],
-      challenge['fifth_word'],
-    ].where((w) => w != null && w.toString().isNotEmpty);
-
-    return words.join(' ');
   }
 
   // ==============================
@@ -151,189 +133,174 @@ class _GameOverScreenState extends State<GameOverScreen> {
       appBar: AppBar(
         title: const Text("🎉 Fin de la partie"),
         backgroundColor: AppColors.primary,
+        centerTitle: true,
+        elevation: 0,
       ),
-      body: Column(
-        children: [
-          // ==============================
-          // HEADER
-          // ==============================
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.primary, AppColors.secondary],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Column(
-              children: [
-                const Icon(Icons.emoji_events,
-                    size: 64, color: Colors.white),
-                const SizedBox(height: 12),
-                const Text(
-                  "Score final",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [AppColors.primaryLight, AppColors.secondaryLight],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // ==============================
+              // HEADER
+              // ==============================
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppColors.primary, AppColors.secondary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  "${widget.finalScore} pts",
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 42,
-                      fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 24),
-
-                // ==============================
-                // STATS TABLE
-                // ==============================
-                const Text(
-                  "Statistiques par joueur",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Table(
-                  border: TableBorder.all(color: Colors.white24),
+                child: const Column(
                   children: [
-                    const TableRow(
-                      decoration: BoxDecoration(color: Colors.white12),
-                      children: [
-                        Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Text("Joueur",
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Text("Résolus",
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Text("Non résolus",
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                    ..._playerStats.entries.map(
-                      (e) => TableRow(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(e.key,
-                                style:
-                                    const TextStyle(color: Colors.white)),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text("${e.value['resolved']}",
-                                style:
-                                    const TextStyle(color: Colors.white)),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text("${e.value['unresolved']}",
-                                style:
-                                    const TextStyle(color: Colors.white)),
-                          ),
-                        ],
+                    Icon(Icons.emoji_events, size: 64, color: Colors.white),
+                    SizedBox(height: 12),
+                    Text(
+                      "Classement final",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
+              ),
 
-          // ==============================
-          // CHALLENGES RESULTS
-          // ==============================
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _challenges.length,
-              itemBuilder: (context, index) {
-                final challenge = _challenges[index];
-                final bool resolved =
-                    challenge['is_resolved'] == 1 ||
-                        challenge['is_resolved'] == true;
+              // ==============================
+              // PLAYER SCORES LIST
+              // ==============================
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _playerScores.length,
+                  itemBuilder: (context, index) {
+                    final player = _playerScores[index];
+                    final name = player['name'] as String;
+                    final score = player['score'] as int;
+                    final resolved = player['resolved'] as int;
+                    final isWinner = index == 0;
 
-                return Card(
-                  color: Colors.grey.shade900,
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  child: ListTile(
-                    leading: Icon(
-                      resolved
-                          ? Icons.check_circle
-                          : Icons.cancel,
-                      color: resolved
-                          ? Colors.greenAccent
-                          : Colors.redAccent,
-                    ),
-                    title: Text(
-                      _getChallengeResult(challenge),
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      "Challenge #${challenge['id']}",
-                      style:
-                          const TextStyle(color: Colors.white70),
-                    ),
-                    trailing: Text(
-                      resolved ? "+100 pts" : "0 pt",
-                      style: TextStyle(
-                        color: resolved
-                            ? Colors.greenAccent
-                            : Colors.redAccent,
-                        fontWeight: FontWeight.bold,
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      elevation: isWinner ? 8 : 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: isWinner
+                            ? BorderSide(color: AppColors.secondary, width: 2)
+                            : BorderSide.none,
                       ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // ==============================
-          // HOME BUTTON
-          // ==============================
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () =>
-                    Navigator.of(context)
-                        .popUntil((r) => r.isFirst),
-                icon: const Icon(Icons.home),
-                label: const Text("Retour à l'accueil"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                        leading: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: isWinner
+                                ? AppColors.secondary
+                                : AppColors.primaryLight,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${index + 1}',
+                              style: TextStyle(
+                                color: isWinner ? Colors.white : AppColors.primaryDark,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: isWinner ? AppColors.secondary : AppColors.text,
+                          ),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            '$resolved challenge${resolved > 1 ? 's' : ''} résolu${resolved > 1 ? 's' : ''}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '$score pts',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryDark,
+                              ),
+                            ),
+                            if (isWinner)
+                              const Text(
+                                '🏆',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
-            ),
+
+              // ==============================
+              // HOME BUTTON
+              // ==============================
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const HomeScreen()),
+                        (route) => false,
+                      );
+                    },
+                    icon: const Icon(Icons.home),
+                    label: const Text(
+                      "Retour à l'accueil",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 4,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

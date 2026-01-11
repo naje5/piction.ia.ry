@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_app/screen/game_over.screen.dart';
+import 'package:flutter_app/screen/home.screen.dart';
 import 'package:flutter_app/services/challenge.service.dart';
 import 'package:flutter_app/services/game.service.dart';
 import 'package:flutter_app/theme/app_colors.dart';
@@ -98,7 +99,10 @@ class _GameRoundScreenState extends ConsumerState<GameRoundScreen> {
     
     if (retryCount >= maxRetries && mounted) {
       _showDialog("Timeout", "La partie n'a pas pu se terminer. Retour à l'accueil.");
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
     }
   }
 
@@ -536,7 +540,10 @@ class _GameRoundScreenState extends ConsumerState<GameRoundScreen> {
     if (_globalTimerExpired) {
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+            (route) => false,
+          );
         }
       });
       return Scaffold(
