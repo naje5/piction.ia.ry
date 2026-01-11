@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/game.service.dart';
 import '../providers/auth.provider.dart';
+import '../providers/user_info.provider.dart';
 import 'game_lobby.screen.dart';
 import '../theme/app_colors.dart'; // Couleurs du thème
 
@@ -11,6 +12,7 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gameService = GameService();
+    final userInfoAsync = ref.watch(userInfoProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -34,6 +36,26 @@ class HomeScreen extends ConsumerWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  userInfoAsync.when(
+                    data: (user) => user != null && user['name'] != null
+                        ? Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Text(
+                              'Bonjour ${user['name']} 👋',
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryDark,
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                    loading: () => const Padding(
+                      padding: EdgeInsets.only(bottom: 24),
+                      child: SizedBox(height: 24),
+                    ),
+                    error: (e, _) => const SizedBox.shrink(),
+                  ),
                   // Bouton créer une partie
                   SizedBox(
                     width: double.infinity,

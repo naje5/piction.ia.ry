@@ -1,11 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_app/screen/play.screen.dart';
+import 'package:flutter_app/screen/challenge.screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth.provider.dart';
 import '../services/game.service.dart';
 import '../theme/app_colors.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
 class GameLobbyScreen extends ConsumerStatefulWidget {
   final int gameId;
@@ -25,15 +27,38 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
   Timer? _timer;
   Map<String, dynamic>? _session;
   bool _isLoading = true;
-  bool _isSimulating = false;
+  int? _currentUserId;
 
   final GameService _service = GameService();
 
   @override
   void initState() {
     super.initState();
+    _fetchCurrentUserId();
     _fetchGameData();
     _timer = Timer.periodic(const Duration(seconds: 10), (_) => _fetchGameData());
+  }
+
+  Future<void> _fetchCurrentUserId() async {
+    final token = ref.read(authNotifierProvider).token;
+    if (token == null) return;
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://pictioniary.wevox.cloud/api/me'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (mounted) {
+          setState(() {
+            _currentUserId = data['id'] ?? data['_id'] ?? data['player_id'];
+          });
+        }
+      }
+    } catch (e) {
+      print('Erreur lors de la récupération de l\'ID utilisateur: $e');
+    }
   }
 
   Future<void> _fetchGameData() async {
@@ -48,25 +73,6 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
         _isLoading = false;
       });
     }
-
-    if (session != null) {
-      final playersCount = [
-        session['blue_player_1'],
-        session['blue_player_2'],
-        session['red_player_1'],
-        session['red_player_2'],
-      ].whereType<int>().length;
-
-      if (playersCount >= 4) {
-        _timer?.cancel();
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => PlayScreen(gameId: widget.gameId)),
-          );
-        }
-      }
-    }
   }
 
   @override
@@ -75,20 +81,29 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
     super.dispose();
   }
 
-  Future<void> _fillWithBots() async {
-    setState(() => _isSimulating = true);
-    final success = await _service.simulatePlayers(widget.gameId);
+  Future<void> _startGame() async {
+    final token = ref.read(authNotifierProvider).token;
+    if (token == null) return;
+
+    final success = await _service.startGame(widget.gameId, token);
     if (mounted) {
-      setState(() => _isSimulating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success
-              ? "✅ Joueurs automatiques ajoutés !"
-              : "❌ Erreur lors de l'ajout des bots"),
-          backgroundColor: success ? AppColors.primary : AppColors.secondary,
-        ),
-      );
-      if (success) _fetchGameData();
+      if (success) {
+        _timer?.cancel();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            
+            builder: (_) => ChallengeScreen(gameId: widget.gameId),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("❌ Impossible de démarrer la partie"),
+            backgroundColor: AppColors.secondary,
+          ),
+        );
+      }
     }
   }
 
@@ -283,7 +298,18 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
     }
 
     final session = _session!;
-    final creatorId = session['player_id'];
+    final sessionCreatorId = session['player_id'] ?? session['creator_id'];
+    final playersCount = [
+      session['blue_player_1'],
+      session['blue_player_2'],
+      session['red_player_1'],
+      session['red_player_2'],
+    ].whereType<int>().length;
+
+    final isCreator = _currentUserId != null
+        ? _currentUserId == sessionCreatorId
+        : (sessionCreatorId == widget.creatorId);
+    final canStartGame = playersCount >= 4 && isCreator;
 
     final List<int> blueTeamIds = [
       session['blue_player_1'],
@@ -384,7 +410,7 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
                               player['name'] ?? 'Joueur $id',
                               style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
-                            trailing: id == creatorId
+                            trailing: id == sessionCreatorId
                                 ? Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 8, vertical: 4),
@@ -445,6 +471,26 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
                 const Spacer(),
                 const SizedBox(height: 20),
 
+                if (canStartGame)
+                  ElevatedButton.icon(
+                    onPressed: _startGame,
+                    icon: const Icon(Icons.play_arrow, size: 22),
+                    label: const Text(
+                      "Démarrer la partie",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 28),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 4,
+                    ),
+                  ),
+                if (canStartGame) const SizedBox(height: 12),
+
                 // Bouton pour changer d'équipe
                 ElevatedButton.icon(
                   onPressed: () {
@@ -468,37 +514,6 @@ class _GameLobbyScreenState extends ConsumerState<GameLobbyScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-
-                if (creatorId == widget.creatorId)
-                  ElevatedButton.icon(
-                    onPressed: _isSimulating ? null : _fillWithBots,
-                    icon: _isSimulating
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.smart_toy),
-                    label: Text(
-                      _isSimulating
-                          ? "Ajout en cours..."
-                          : "Remplir avec des bots 🤖",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.secondary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 14,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 20),
               ],
             ),
           ),

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ChallengeService {
-  /// 🔹 Simule la création de 3 challenges pour une session donnée
   Future<void> simulateChallenges(int gameSessionId, String token) async {
     final List<Map<String, dynamic>> fakeChallenges = [
       {
